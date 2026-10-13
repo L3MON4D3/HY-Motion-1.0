@@ -31,7 +31,7 @@ dependencies = [
 packages = ["hymotion"]
 
 # Keep upstream's relative asset layout beneath the installed namespace package.
-# Until upstream resolves resources itself, callers use this directory as CWD.
+# hymotion.resources resolves these paths without changing the caller's CWD.
 [tool.hatch.build.targets.wheel.force-include]
 "stats" = "hymotion/stats"
 "scripts/gradio/static/assets/dump_wooden" = "hymotion/scripts/gradio/static/assets/dump_wooden"

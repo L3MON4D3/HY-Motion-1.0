@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from ..resources import asset_path
 from ..utils.geometry import (
     rot6d_to_rotation_matrix,
     rotation_matrix_to_angle_axis,
@@ -222,10 +223,12 @@ class WoodenMesh(torch.nn.Module):
     Uses simple LBS without shape blending (fixed skeleton).
     """
 
-    def __init__(self, model_path="scripts/gradio/static/assets/dump_wooden"):
+    def __init__(self, model_path=None):
         torch.nn.Module.__init__(self)
 
-        # Load model data from .bin files
+        # Defaults are bundled data, not paths relative to the caller's CWD.
+        if model_path is None:
+            model_path = asset_path("scripts/gradio/static/assets/dump_wooden")
         model = load_model_data(model_path)
 
         # Register buffers like original SMPLMesh

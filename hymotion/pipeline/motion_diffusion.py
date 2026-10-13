@@ -9,6 +9,7 @@ from scipy.signal import savgol_filter
 from torch import Tensor
 from torchdiffeq import odeint
 
+from ..resources import asset_path
 from ..utils.geometry import (
     matrix_to_quaternion,
     quaternion_fix_continuity,
@@ -128,7 +129,11 @@ class MotionGeneration(torch.nn.Module):
             torch.randn(1, 1, self._network_module_args.get("ctxt_input_dim", 4096))
         )
         # build buffer
-        self.mean_std_dir = mean_std_dir
+        self.mean_std_dir = (
+            str(asset_path("stats"))
+            if mean_std_dir is None or osp.normpath(mean_std_dir) == "stats"
+            else mean_std_dir
+        )
         self._parse_buffer(self.motion_type)
 
         self.output_mesh_fps = kwargs.get("output_mesh_fps", 30)
