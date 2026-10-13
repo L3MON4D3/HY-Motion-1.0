@@ -1,7 +1,7 @@
 import os
 import os.path as osp
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -488,7 +488,26 @@ class MotionFlowMatching(MotionGeneration):
         use_special_game_feat: bool = False,
         hidden_state_dict=None,
         length=None,
+        progress_callback: Optional[Callable[[float], None]] = None,
     ) -> Dict[str, Any]:
+        """Generate motion, optionally reporting completed work as fractions.
+
+        Progress reserves 0-10% for text conditioning, 10-90% for sampling,
+        and 90-100% for decoding. Sampling progress measures completed ODE
+        integration time, not model evaluations (RK/adaptive solvers may make
+        multiple evaluations per step). Callback exceptions abort generation.
+        """
+        last_progress = -1.0
+
+        def report_progress(value: float) -> None:
+            nonlocal last_progress
+            if progress_callback is not None and value > last_progress:
+                progress_callback(value)
+                last_progress = value
+
+        if progress_callback is not None and self._noise_scheduler_cfg.get("method") == "scipy_solver":
+            raise ValueError("Progress reporting requires a native torchdiffeq solver")
+        report_progress(0.0)
         device = get_module_device(self)
         if length is None:
             length = int(round(duration_slider * self.output_mesh_fps))
@@ -534,6 +553,9 @@ class MotionFlowMatching(MotionGeneration):
         assert len(ctxt_input.shape) == 3, f"ctxt_input.shape: {ctxt_input.shape}, should be (B, 1, D)"
         assert len(ctxt_length.shape) == 1, f"ctxt_length.shape: {ctxt_length.shape}, should be (B,)"
 
+        if progress_callback is not None and device.type == "cuda":
+            torch.cuda.synchronize(device)
+        report_progress(0.1)
         ctxt_mask_temporal = length_to_mask(ctxt_length, ctxt_input.shape[1])
         x_length = torch.LongTensor([length] * repeat).to(device)
         x_mask_temporal = length_to_mask(x_length, self.train_frames)
@@ -569,7 +591,16 @@ class MotionFlowMatching(MotionGeneration):
                 x_pred = x_pred_basic + text_guidance_scale * (x_pred_text - x_pred_basic)
             return x_pred
 
-        # duplicate test corner for inner time step oberservation
+        if progress_callback is not None:
+            def on_step(t0: Tensor, _y0: Tensor, _dt: Tensor) -> None:
+                # callback_step fires BEFORE the next step. Its t0 therefore
+                # measures work already completed, not work about to start.
+                # Reading the CUDA scalar also waits for preceding GPU work.
+                completed = min(1.0, max(0.0, float(t0)))
+                report_progress(0.1 + 0.8 * completed)
+
+            fn.callback_step = on_step
+
         t = torch.linspace(0, 1, self.validation_steps + 1, device=device)
         y0 = self.noise_from_seeds(
             torch.zeros(
@@ -583,10 +614,17 @@ class MotionFlowMatching(MotionGeneration):
         )
         with torch.no_grad():
             trajectory = odeint(fn, y0, t, **self._noise_scheduler_cfg)
+        if progress_callback is not None and device.type == "cuda":
+            torch.cuda.synchronize(device)
+        # No following callback_step exists to report the final interval.
+        report_progress(0.9)
         sampled = trajectory[-1][:, :length, ...].clone()
         assert isinstance(sampled, Tensor), f"sampled must be a Tensor, but got {type(sampled)}"
 
         output_dict = self.decode_motion_from_latent(sampled, should_apply_smooothing=True)
+        if progress_callback is not None and device.type == "cuda":
+            torch.cuda.synchronize(device)
+        report_progress(1.0)
 
         return {
             **output_dict,

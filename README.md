@@ -1,5 +1,24 @@
 [中文阅读](README_zh_cn.md)
 
+## Fork integration
+
+This fork packages code and runtime assets together (weights remain external).
+`MotionFlowMatching.generate(..., progress_callback=callback)` optionally calls
+`callback(fraction)` with monotonic values from 0 to 1:
+
+- 0–0.1: text conditioning
+- 0.1–0.9: completed sampling integration time
+- 0.9–1: motion decoding
+
+Sampling updates describe completed ODE intervals, not model evaluations or
+wall-clock estimates. Native torchdiffeq fixed/adaptive solvers are supported;
+the SciPy solver does not support progress callbacks. Callback exceptions abort
+generation, allowing cancellation. CUDA progress waits for the corresponding
+GPU work to finish. Omitting the callback preserves the original behavior.
+
+Tests in `tests/test_progress.py` run real solvers with a tiny dummy denoiser
+(no weights or text models), on CPU and CUDA when available.
+
 
 <p align="center">
   <img src="./assets/banner.png" alt="Banner" width="100%">
