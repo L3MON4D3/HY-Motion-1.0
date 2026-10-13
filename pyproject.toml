@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hymotion"
+version = "1.0.0"
+description = "HY-Motion text-to-motion inference"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "License.txt" }
+# Inference dependencies only: no Gradio UI, FBX SDK, or model weights.
+# The consumer's lockfile selects exact versions (including CUDA PyTorch).
+dependencies = [
+    "torch>=2.5,<3",
+    "torchdiffeq==0.2.5",
+    "transformers==4.53.3",
+    "huggingface-hub==0.30.0",
+    "accelerate==0.30.1",
+    "einops==0.8.1",
+    "safetensors==0.5.3",
+    "bitsandbytes==0.49.0",
+    "numpy>=1.24,<3",
+    "scipy>=1.10",
+    "PyYAML>=6,<7",
+    "omegaconf==2.3.0",
+    "transforms3d==0.4.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["hymotion"]
+
+# Keep upstream's relative asset layout beneath the installed namespace package.
+# Until upstream resolves resources itself, callers use this directory as CWD.
+[tool.hatch.build.targets.wheel.force-include]
+"stats" = "hymotion/stats"
+"scripts/gradio/static/assets/dump_wooden" = "hymotion/scripts/gradio/static/assets/dump_wooden"
+"assets/wooden_models" = "hymotion/assets/wooden_models"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pyproject.toml",
+    "/README.md",
+    "/License.txt",
+    "/hymotion",
+    "/stats",
+    "/scripts/gradio/static/assets/dump_wooden",
+    "/assets/wooden_models",
+]
